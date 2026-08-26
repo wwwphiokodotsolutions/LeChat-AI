@@ -1,0 +1,755 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title|default('GitHub Monitoring') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .repo-header {
+        background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+        color: white;
+        border-radius: 0.5rem;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    .repo-stat {
+        text-align: center;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background: rgba(255,255,255,0.1);
+    }
+    .repo-stat-value {
+        font-size: 2rem;
+        font-weight: 600;
+    }
+    .repo-stat-label {
+        font-size: 0.9rem;
+        opacity: 0.8;
+    }
+    .issue-card {
+        border-left: 4px solid;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .issue-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .issue-open {
+        border-left-color: #2563eb;
+    }
+    .issue-closed {
+        border-left-color: #10b981;
+    }
+    .pr-card {
+        border-left: 4px solid;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .pr-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .pr-open {
+        border-left-color: #2563eb;
+    }
+    .pr-closed {
+        border-left-color: #6c757d;
+    }
+    .pr-merged {
+        border-left-color: #8b5cf6;
+    }
+    .contributor-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+    .workflow-status {
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    .commit-message {
+        font-family: monospace;
+        font-size: 0.9rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    .health-badge {
+        font-size: 3rem;
+        font-weight: 700;
+    }
+    .health-grade {
+        font-size: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="page-title">
+            <i class="fa fa-github"></i> GitHub Repository Monitoring
+            <small class="text-muted">Track issues, pull requests, commits, and more</small>
+        </h1>
+    </div>
+</div>
+
+<!-- Repository Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="repo-header">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2 class="mb-2">
+                        <i class="fa fa-folder-open me-2"></i>
+                        <span id="repo-name">Loading...</span>
+                    </h2>
+                    <p class="mb-0 opacity-80" id="repo-description">-</p>
+                    <div class="mt-3">
+                        <span class="badge bg-primary me-2" id="repo-language">-</span>
+                        <span class="badge bg-secondary me-2" id="repo-license">-</span>
+                        <span class="badge bg-info" id="repo-size">-</span>
+                    </div>
+                </div>
+                <div class="col-md-4 text-end">
+                    <div class="health-badge text-white mb-2" id="github-health-score">-</div>
+                    <div class="health-grade text-white" id="github-health-grade">-</div>
+                    <div class="text-muted small" id="health-last-updated">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Repository Statistics -->
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-chart-bar"></i> Repository Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-stars">0</div>
+                            <div class="repo-stat-label">Stars</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-forks">0</div>
+                            <div class="repo-stat-label">Forks</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-issues-total">0</div>
+                            <div class="repo-stat-label">Issues</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-prs-total">0</div>
+                            <div class="repo-stat-label">Pull Requests</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row text-center mt-3">
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-contributors">0</div>
+                            <div class="repo-stat-label">Contributors</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-commits">0</div>
+                            <div class="repo-stat-label">Commits</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-workflows">0</div>
+                            <div class="repo-stat-label">Workflows</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="repo-stat">
+                            <div class="repo-stat-value" id="repo-health-score">0%</div>
+                            <div class="repo-stat-label">Health Score</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-info-circle"></i> Repository Info
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item mb-3">
+                        <label class="text-muted small">Full Name</label>
+                        <div class="fw-bold" id="repo-full-name">-</div>
+                    </div>
+                    <div class="info-item mb-3">
+                        <label class="text-muted small">Created</label>
+                        <div class="fw-bold" id="repo-created">-</div>
+                    </div>
+                    <div class="info-item mb-3">
+                        <label class="text-muted small">Last Updated</label>
+                        <div class="fw-bold" id="repo-updated">-</div>
+                    </div>
+                    <div class="info-item mb-3">
+                        <label class="text-muted small">Last Pushed</label>
+                        <div class="fw-bold" id="repo-pushed">-</div>
+                    </div>
+                    <div class="info-item">
+                        <label class="text-muted small">HTML URL</label>
+                        <div class="fw-bold">
+                            <a href="#" id="repo-url" target="_blank" class="text-decoration-none">
+                                <i class="fa fa-external-link me-1"></i> Open Repository
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Health Status -->
+<div class="row mb-4" id="health-alerts-row" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-heartbeat"></i> Repository Health
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshHealth()">
+                    <i class="fa fa-refresh"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="health-indicator text-center py-4">
+                            <div class="display-4 fw-bold" id="health-score-display">0%</div>
+                            <div class="h4 text-muted mb-3" id="health-grade-display">F</div>
+                            <div class="progress" style="height: 10px;">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     id="health-progress" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="health-issues">
+                            <h6 class="text-muted mb-3">Health Issues</h6>
+                            <div id="health-issues-list">
+                                <div class="text-muted small">No issues detected</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Issues Section -->
+<div class="row mb-4">
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-bug"></i> Open Issues
+                    <span class="badge bg-primary ms-2" id="issues-count">0</span>
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshIssues()">
+                    <i class="fa fa-refresh"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Title</th>
+                                <th>Labels</th>
+                                <th>Assignee</th>
+                                <th>Comments</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody id="issues-table-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading issues...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3 text-center">
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadMoreIssues()" id="load-more-issues">
+                        <i class="fa fa-plus me-1"></i> Load More
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-code-fork"></i> Pull Requests
+                    <span class="badge bg-success ms-2" id="prs-count">0</span>
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshPulls()">
+                    <i class="fa fa-refresh"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>#</th>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Assignee</th>
+                                <th>Commits</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pulls-table-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading pull requests...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3 text-center">
+                    <button class="btn btn-sm btn-outline-primary" onclick="loadMorePulls()" id="load-more-pulls">
+                        <i class="fa fa-plus me-1"></i> Load More
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Commits Section -->
+<div class="row mb-4">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-history"></i> Recent Commits
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshCommits()">
+                    <i class="fa fa-refresh"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>SHA</th>
+                                <th>Message</th>
+                                <th>Author</th>
+                                <th>Date</th>
+                                <th>Link</th>
+                            </tr>
+                        </thead>
+                        <tbody id="commits-table-body">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Loading commits...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Contributors Section -->
+<div class="row mb-4">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-users"></i> Top Contributors
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshContributors()">
+                    <i class="fa fa-refresh"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="row" id="contributors-list">
+                    <div class="col-md-3 col-6 mb-3 text-center">
+                        <div class="contributor-card">
+                            <img src="https://via.placeholder.com/40" alt="Loading" class="contributor-avatar mb-2">
+                            <div class="fw-bold small" id="contributor-name-0">-</div>
+                            <div class="text-muted small" id="contributor-commits-0">0 commits</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workflow Runs Section -->
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-cogs"></i> Recent Workflow Runs
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshWorkflows()">
+                    <i class="fa fa-refresh"></i>
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Workflow</th>
+                                <th>Event</th>
+                                <th>Status</th>
+                                <th>Conclusion</th>
+                                <th>Created</th>
+                                <th>Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody id="workflows-table-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading workflow runs...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let issuesPage = 1;
+let pullsPage = 1;
+let commitsPage = 1;
+
+function updateRepositoryInfo(data) {
+    if (!data || !data.github || !data.github.repo) return;
+    
+    const repo = data.github.repo;
+    
+    $('#repo-name').text(repo.full_name || '-');
+    $('#repo-description').text(repo.description || 'No description provided');
+    $('#repo-language').text(repo.language || 'Unknown');
+    $('#repo-license').text(repo.license || 'No License');
+    $('#repo-size').text((repo.size || 0) + ' KB');
+    $('#repo-full-name').text(repo.full_name || '-');
+    $('#repo-created').text(moment(repo.created_at).format('YYYY-MM-DD HH:mm:ss') || '-');
+    $('#repo-updated').text(moment(repo.updated_at).format('YYYY-MM-DD HH:mm:ss') || '-');
+    $('#repo-pushed').text(moment(repo.pushed_at).format('YYYY-MM-DD HH:mm:ss') || '-');
+    $('#repo-url').attr('href', repo.html_url || '#');
+    
+    // Update stats
+    $('#repo-stars').text(repo.stars || 0);
+    $('#repo-forks').text(repo.forks || 0);
+}
+
+function updateRepositoryStats(data) {
+    if (!data || !data.github) return;
+    
+    const github = data.github;
+    
+    $('#repo-issues-total').text(github.issues?.total || 0);
+    $('#repo-prs-total').text(github.pull_requests?.total || 0);
+    $('#repo-contributors').text(github.contributors?.total || 0);
+    $('#repo-commits').text(github.commits?.total || 0);
+    $('#repo-workflows').text(github.workflows?.total || 0);
+    $('#repo-health-score').text(github.health?.score || 0);
+}
+
+function updateHealthInfo(data) {
+    if (!data || !data.github_health) return;
+    
+    const health = data.github_health;
+    
+    $('#github-health-score').text(health.score + '%');
+    $('#github-health-grade').text(health.grade);
+    $('#health-score-display').text(health.score + '%');
+    $('#health-grade-display').text(health.grade);
+    $('#health-progress').css('width', health.score + '%');
+    $('#health-last-updated').text(moment().format('YYYY-MM-DD HH:mm:ss'));
+    
+    // Update health issues
+    if (health.issues && health.issues.length > 0) {
+        let html = '';
+        health.issues.forEach(issue => {
+            html += `<div class="alert alert-warning mb-2 p-2 small">${issue}</div>`;
+        });
+        $('#health-issues-list').html(html);
+    } else {
+        $('#health-issues-list').html('<div class="text-muted small">No issues detected</div>');
+    }
+    
+    $('#health-alerts-row').show();
+}
+
+function updateIssues(issues) {
+    if (!issues || issues.length === 0) {
+        $('#issues-table-body').html('<tr><td colspan="6" class="text-center text-muted">No open issues</td></tr>');
+        $('#issues-count').text(0);
+        return;
+    }
+    
+    let html = '';
+    issues.forEach(issue => {
+        const labelsHtml = issue.labels.map(label => 
+            `<span class="badge bg-primary me-1">${label}</span>`
+        ).join('');
+        
+        html += `
+            <tr class="issue-card issue-open">
+                <td>#${issue.number}</td>
+                <td>
+                    <a href="${issue.html_url}" target="_blank" class="text-decoration-none">
+                        ${issue.title}
+                    </a>
+                </td>
+                <td>${labelsHtml || '-'}</td>
+                <td>${issue.assignee || '-'}</td>
+                <td>${issue.comments || 0}</td>
+                <td>${moment(issue.updated_at).fromNow()}</td>
+            </tr>
+        `;
+    });
+    
+    $('#issues-table-body').html(html);
+    $('#issues-count').text(issues.length);
+}
+
+function updatePulls(pulls) {
+    if (!pulls || pulls.length === 0) {
+        $('#pulls-table-body').html('<tr><td colspan="6" class="text-center text-muted">No pull requests</td></tr>');
+        $('#prs-count').text(0);
+        return;
+    }
+    
+    let html = '';
+    pulls.forEach(pr => {
+        let statusBadge = 'bg-success';
+        let statusText = 'Open';
+        
+        if (pr.state === 'closed') {
+            if (pr.merged_at) {
+                statusBadge = 'bg-purple';
+                statusText = 'Merged';
+            } else {
+                statusBadge = 'bg-secondary';
+                statusText = 'Closed';
+            }
+        }
+        
+        const labelsHtml = pr.labels.map(label => 
+            `<span class="badge bg-info me-1">${label}</span>`
+        ).join('');
+        
+        html += `
+            <tr class="pr-card pr-${pr.state}">
+                <td>#${pr.number}</td>
+                <td>
+                    <a href="${pr.html_url}" target="_blank" class="text-decoration-none">
+                        ${pr.title}
+                    </a>
+                </td>
+                <td><span class="badge ${statusBadge}">${statusText}</span></td>
+                <td>${pr.assignee || '-'}</td>
+                <td>${pr.commits || 0}</td>
+                <td>${moment(pr.updated_at).fromNow()}</td>
+            </tr>
+        `;
+    });
+    
+    $('#pulls-table-body').html(html);
+    $('#prs-count').text(pulls.length);
+}
+
+function updateCommits(commits) {
+    if (!commits || commits.length === 0) {
+        $('#commits-table-body').html('<tr><td colspan="5" class="text-center text-muted">No commits found</td></tr>');
+        return;
+    }
+    
+    let html = '';
+    commits.forEach(commit => {
+        html += `
+            <tr>
+                <td><code>${commit.sha}</code></td>
+                <td class="commit-message">${commit.message}</td>
+                <td>${commit.author || '-'}</td>
+                <td>${moment(commit.date).fromNow()}</td>
+                <td>
+                    <a href="${commit.html_url}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-external-link"></i>
+                    </a>
+                </td>
+            </tr>
+        `;
+    });
+    
+    $('#commits-table-body').html(html);
+}
+
+function updateContributors(contributors) {
+    if (!contributors || contributors.length === 0) {
+        $('#contributors-list').html('<div class="col-12 text-center text-muted">No contributors found</div>');
+        return;
+    }
+    
+    let html = '';
+    contributors.forEach((contributor, index) => {
+        html += `
+            <div class="col-md-3 col-6 mb-3 text-center">
+                <div class="contributor-card">
+                    <img src="${contributor.avatar_url || 'https://via.placeholder.com/40'}" 
+                         alt="${contributor.login}" 
+                         class="contributor-avatar mb-2">
+                    <div class="fw-bold small">${contributor.login || '-'}</div>
+                    <div class="text-muted small">${contributor.contributions || 0} commits</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    $('#contributors-list').html(html);
+}
+
+function updateWorkflows(workflows) {
+    if (!workflows || workflows.length === 0) {
+        $('#workflows-table-body').html('<tr><td colspan="6" class="text-center text-muted">No workflow runs found</td></tr>');
+        return;
+    }
+    
+    let html = '';
+    workflows.forEach(workflow => {
+        let statusBadge = 'bg-primary';
+        let statusText = workflow.status || 'Unknown';
+        
+        if (workflow.conclusion) {
+            if (workflow.conclusion === 'success') {
+                statusBadge = 'bg-success';
+                statusText = 'Success';
+            } else if (workflow.conclusion === 'failure') {
+                statusBadge = 'bg-danger';
+                statusText = 'Failed';
+            } else {
+                statusBadge = 'bg-warning';
+                statusText = workflow.conclusion;
+            }
+        } else if (workflow.status === 'completed') {
+            statusBadge = 'bg-secondary';
+            statusText = 'Completed';
+        } else if (workflow.status === 'in_progress') {
+            statusBadge = 'bg-info';
+            statusText = 'In Progress';
+        }
+        
+        const created = moment(workflow.created_at);
+        const updated = moment(workflow.updated_at);
+        const duration = updated.diff(created, 'seconds');
+        const durationText = duration < 60 ? duration + 's' : 
+                            duration < 3600 ? Math.floor(duration / 60) + 'm' : 
+                            Math.floor(duration / 3600) + 'h';
+        
+        html += `
+            <tr>
+                <td>${workflow.name || '-'}</td>
+                <td>${workflow.event || '-'}</td>
+                <td><span class="badge ${statusBadge}">${statusText}</span></td>
+                <td>${workflow.conclusion || '-'}</td>
+                <td>${moment(workflow.created_at).fromNow()}</td>
+                <td>${durationText}</td>
+            </tr>
+        `;
+    });
+    
+    $('#workflows-table-body').html(html);
+}
+
+function refreshIssues() {
+    issuesPage = 1;
+    socket.emit('request_metrics');
+}
+
+function loadMoreIssues() {
+    issuesPage++;
+    fetchIssues(issuesPage);
+}
+
+function refreshPulls() {
+    pullsPage = 1;
+    socket.emit('request_metrics');
+}
+
+function loadMorePulls() {
+    pullsPage++;
+    fetchPulls(pullsPage);
+}
+
+function refreshCommits() {
+    socket.emit('request_metrics');
+}
+
+function refreshContributors() {
+    socket.emit('request_metrics');
+}
+
+function refreshWorkflows() {
+    socket.emit('request_metrics');
+}
+
+function refreshHealth() {
+    socket.emit('request_metrics');
+}
+
+// Initialize on page load
+$(document).ready(function() {
+    // Request initial data
+    socket.emit('request_metrics');
+});
+
+// Socket.IO event handlers
+socket.on('metrics_update', function(data) {
+    updateRepositoryInfo(data);
+    updateRepositoryStats(data);
+    updateHealthInfo(data);
+    
+    if (data.github) {
+        updateIssues(data.github.issues?.recent || []);
+        updatePulls(data.github.pull_requests?.recent || []);
+        updateCommits(data.github.commits?.recent || []);
+        updateContributors(data.github.contributors?.recent || []);
+        updateWorkflows(data.github.workflows?.recent || []);
+    }
+});
+</script>
+{% endblock %}

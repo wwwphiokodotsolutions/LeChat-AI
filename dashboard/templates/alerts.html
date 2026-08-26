@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title|default('Alerts') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .alert-card {
+        border-left: 4px solid;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        cursor: pointer;
+    }
+    .alert-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .alert-high {
+        border-left-color: #dc3545;
+        background-color: rgba(220, 53, 69, 0.05);
+    }
+    .alert-warning {
+        border-left-color: #ffc107;
+        background-color: rgba(255, 193, 7, 0.05);
+    }
+    .alert-info {
+        border-left-color: #17a2b8;
+        background-color: rgba(23, 162, 184, 0.05);
+    }
+    .alert-severity-badge {
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+    }
+    .alert-time {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .alert-message {
+        font-size: 0.95rem;
+        line-height: 1.4;
+    }
+    .alert-actions {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    .alert-card:hover .alert-actions {
+        opacity: 1;
+    }
+    .alert-filter-btn {
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .alert-stats {
+        text-align: center;
+        padding: 1.5rem;
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+    }
+    .alert-stats-value {
+        font-size: 2rem;
+        font-weight: 600;
+    }
+    .alert-stats-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    .acknowledge-btn {
+        cursor: pointer;
+        color: #6c757d;
+        transition: color 0.2s ease;
+    }
+    .acknowledge-btn:hover {
+        color: #2563eb;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="page-title">
+            <i class="fa fa-bell"></i> Alerts Dashboard
+            <small class="text-muted">Monitor and manage system alerts</small>
+        </h1>
+    </div>
+</div>
+
+<!-- Alert Statistics -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="alert-stats">
+            <div class="alert-stats-value" id="total-alerts">0</div>
+            <div class="alert-stats-label">Total Alerts</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="alert-stats">
+            <div class="alert-stats-value text-danger" id="high-alerts">0</div>
+            <div class="alert-stats-label">High Severity</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="alert-stats">
+            <div class="alert-stats-value text-warning" id="warning-alerts">0</div>
+            <div class="alert-stats-label">Warning</div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="alert-stats">
+            <div class="alert-stats-value text-info" id="info-alerts">0</div>
+            <div class="alert-stats-label">Info</div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Filters -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-filter"></i> Filter Alerts
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="btn-group-toggle" data-toggle="buttons">
+                    <label class="btn btn-outline-primary alert-filter-btn active">
+                        <input type="radio" name="alert-filter" value="all" checked>
+                        <i class="fa fa-list me-1"></i> All Alerts
+                    </label>
+                    <label class="btn btn-outline-danger alert-filter-btn">
+                        <input type="radio" name="alert-filter" value="high">
+                        <i class="fa fa-exclamation-circle me-1"></i> High
+                    </label>
+                    <label class="btn btn-outline-warning alert-filter-btn">
+                        <input type="radio" name="alert-filter" value="warning">
+                        <i class="fa fa-exclamation-triangle me-1"></i> Warning
+                    </label>
+                    <label class="btn btn-outline-info alert-filter-btn">
+                        <input type="radio" name="alert-filter" value="info">
+                        <i class="fa fa-info-circle me-1"></i> Info
+                    </label>
+                    <label class="btn btn-outline-secondary alert-filter-btn">
+                        <input type="radio" name="alert-filter" value="system">
+                        <i class="fa fa-server me-1"></i> System
+                    </label>
+                    <label class="btn btn-outline-secondary alert-filter-btn">
+                        <input type="radio" name="alert-filter" value="github">
+                        <i class="fa fa-github me-1"></i> GitHub
+                    </label>
+                    <label class="btn btn-outline-secondary alert-filter-btn">
+                        <input type="radio" name="alert-filter" value="docker">
+                        <i class="fa fa-whale me-1"></i> Docker
+                    </label>
+                </div>
+                <div class="mt-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="alert-search" class="form-label small text-muted">Search Alerts</label>
+                                <input type="text" class="form-control form-control-sm" 
+                                       id="alert-search" placeholder="Search by message or type...">
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <button class="btn btn-sm btn-outline-danger" onclick="clearAllAlerts()">
+                                <i class="fa fa-trash me-1"></i> Clear All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="refreshAlerts()">
+                                <i class="fa fa-refresh me-1"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Alerts -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-bell"></i> Active Alerts
+                    <span class="badge bg-primary ms-2" id="active-alerts-count">0</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="alerts-list">
+                    <div class="text-center py-4 text-muted">
+                        <i class="fa fa-bell-slash fa-3x mb-3"></i>
+                        <h5>No active alerts</h5>
+                        <p class="small">All systems are operating normally</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert History -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-history"></i> Alert History
+                </h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="exportAlerts()">
+                        <i class="fa fa-download me-1"></i> Export
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Type</th>
+                                <th>Severity</th>
+                                <th>Message</th>
+                                <th>Value</th>
+                                <th>Threshold</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-history-body">
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">No alert history</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allAlerts = [];
+let currentFilter = 'all';
+
+function updateAlerts(data) {
+    if (!data || !data.alerts) return;
+    
+    allAlerts = data.alerts;
+    
+    // Update statistics
+    const total = allAlerts.length;
+    const high = allAlerts.filter(a => a.severity === 'high').length;
+    const warning = allAlerts.filter(a => a.severity === 'warning').length;
+    const info = allAlerts.filter(a => a.severity === 'info').length;
+    
+    $('#total-alerts').text(total);
+    $('#high-alerts').text(high);
+    $('#warning-alerts').text(warning);
+    $('#info-alerts').text(info);
+    $('#active-alerts-count').text(total);
+    
+    // Update alerts list
+    renderAlerts(allAlerts);
+    
+    // Update history
+    renderAlertHistory(allAlerts);
+}
+
+function renderAlerts(alerts) {
+    const container = $('#alerts-list');
+    
+    if (alerts.length === 0) {
+        container.html(`
+            <div class="text-center py-4 text-muted">
+                <i class="fa fa-bell-slash fa-3x mb-3"></i>
+                <h5>No active alerts</h5>
+                <p class="small">All systems are operating normally</p>
+            </div>
+        `);
+        return;
+    }
+    
+    let html = '';
+    alerts.forEach((alert, index) => {
+        const severityClass = `alert-${alert.severity}`;
+        const severityBadgeClass = `bg-${alert.severity === 'high' ? 'danger' : alert.severity}`;
+        const iconClass = alert.severity === 'high' ? 'fa-exclamation-circle' : 
+                         alert.severity === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+        
+        html += `
+            <div class="alert-card ${severityClass} mb-3 p-3" onclick="toggleAlertAcknowledged(${index})">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center mb-2">
+                            <i class="fa ${iconClass} me-2 text-${alert.severity}"></i>
+                            <span class="alert-severity-badge ${severityBadgeClass}">
+                                ${alert.severity.toUpperCase()}
+                            </span>
+                            <span class="ms-2 badge bg-secondary">${alert.type || 'system'}</span>
+                        </div>
+                        <div class="alert-message mb-2">${alert.message || 'No message'}</div>
+                        <div class="alert-time">
+                            <i class="fa fa-clock-o me-1"></i>
+                            ${moment().format('YYYY-MM-DD HH:mm:ss')}
+                        </div>
+                        <div class="alert-details small text-muted mt-2">
+                            <span class="me-3">
+                                <i class="fa fa-chart-line me-1"></i>
+                                Value: ${alert.value || 0}${alert.value ? '%' : ''}
+                            </span>
+                            <span class="me-3">
+                                <i class="fa fa-thermometer me-1"></i>
+                                Threshold: ${alert.threshold || 0}${alert.threshold ? '%' : ''}
+                            </span>
+                            <span class="me-3">
+                                <i class="fa fa-folder me-1"></i>
+                                ${alert.mountpoint ? 'Mount: ' + alert.mountpoint : ''}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="alert-actions">
+                        <span class="acknowledge-btn" title="Acknowledge alert">
+                            <i class="fa fa-check-circle"></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.html(html);
+}
+
+function renderAlertHistory(alerts) {
+    const tbody = $('#alerts-history-body');
+    
+    if (alerts.length === 0) {
+        tbody.html('<tr><td colspan="7" class="text-center text-muted">No alert history</td></tr>');
+        return;
+    }
+    
+    let html = '';
+    alerts.forEach(alert => {
+        const severityBadgeClass = `bg-${alert.severity === 'high' ? 'danger' : alert.severity}`;
+        const statusBadgeClass = alert.acknowledged ? 'bg-secondary' : 'bg-success';
+        const statusText = alert.acknowledged ? 'Acknowledged' : 'Active';
+        
+        html += `
+            <tr>
+                <td>${moment().format('YYYY-MM-DD HH:mm:ss')}</td>
+                <td><span class="badge bg-secondary">${alert.type || 'system'}</span></td>
+                <td><span class="badge ${severityBadgeClass}">${alert.severity || 'unknown'}</span></td>
+                <td>${alert.message || '-'}</td>
+                <td>${alert.value || 0}${alert.value ? '%' : ''}</td>
+                <td>${alert.threshold || 0}${alert.threshold ? '%' : ''}</td>
+                <td><span class="badge ${statusBadgeClass}">${statusText}</span></td>
+            </tr>
+        `;
+    });
+    
+    tbody.html(html);
+}
+
+function toggleAlertAcknowledged(index) {
+    if (allAlerts[index]) {
+        allAlerts[index].acknowledged = !allAlerts[index].acknowledged;
+        renderAlerts(allAlerts);
+        renderAlertHistory(allAlerts);
+    }
+}
+
+function filterAlerts() {
+    const filter = $('input[name="alert-filter"]:checked').val();
+    const searchText = $('#alert-search').val().toLowerCase();
+    
+    currentFilter = filter;
+    
+    let filtered = allAlerts.filter(alert => {
+        // Filter by type
+        if (filter !== 'all' && filter !== alert.type) {
+            return false;
+        }
+        
+        // Filter by severity
+        if (filter === 'high' && alert.severity !== 'high') return false;
+        if (filter === 'warning' && alert.severity !== 'warning') return false;
+        if (filter === 'info' && alert.severity !== 'info') return false;
+        
+        // Filter by search text
+        if (searchText && !alert.message.toLowerCase().includes(searchText) && 
+            !alert.type.toLowerCase().includes(searchText)) {
+            return false;
+        }
+        
+        return true;
+    });
+    
+    renderAlerts(filtered);
+}
+
+function clearAllAlerts() {
+    if (confirm('Are you sure you want to clear all alerts?')) {
+        allAlerts = [];
+        updateAlerts({alerts: []});
+        socket.emit('request_metrics');
+    }
+}
+
+function refreshAlerts() {
+    socket.emit('request_metrics');
+}
+
+function exportAlerts() {
+    if (allAlerts.length === 0) {
+        alert('No alerts to export');
+        return;
+    }
+    
+    const csv = convertToCSV(allAlerts);
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'alerts_export_' + moment().format('YYYYMMDD_HHmmss') + '.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function convertToCSV(alerts) {
+    const headers = ['Timestamp', 'Type', 'Severity', 'Message', 'Value', 'Threshold', 'Status'];
+    const rows = alerts.map(alert => [
+        moment().format('YYYY-MM-DD HH:mm:ss'),
+        alert.type || '',
+        alert.severity || '',
+        alert.message || '',
+        (alert.value || 0) + (alert.value ? '%' : ''),
+        (alert.threshold || 0) + (alert.threshold ? '%' : ''),
+        alert.acknowledged ? 'Acknowledged' : 'Active'
+    ]);
+    
+    return [headers, ...rows].map(row => row.join(',')).join('\n');
+}
+
+// Event handlers
+$(document).ready(function() {
+    // Filter button change
+    $('input[name="alert-filter"]').change(function() {
+        filterAlerts();
+    });
+    
+    // Search input change
+    $('#alert-search').on('input', function() {
+        filterAlerts();
+    });
+    
+    // Request initial data
+    socket.emit('request_metrics');
+});
+
+// Socket.IO event handlers
+socket.on('metrics_update', function(data) {
+    updateAlerts(data);
+});
+</script>
+{% endblock %}

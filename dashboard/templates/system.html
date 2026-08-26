@@ -1,0 +1,885 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title|default('System Monitoring') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .gauge-container {
+        position: relative;
+        width: 150px;
+        height: 150px;
+        margin: 0 auto;
+    }
+    .gauge-chart {
+        width: 100%;
+        height: 100%;
+    }
+    .process-table {
+        font-size: 0.9rem;
+    }
+    .disk-partition {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+    }
+    .alert-card {
+        border-left: 4px solid;
+        border-left-color: #dc3545;
+    }
+    .alert-card.warning {
+        border-left-color: #ffc107;
+    }
+    .alert-card.info {
+        border-left-color: #17a2b8;
+    }
+    .network-stat {
+        text-align: center;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        background: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <h1 class="page-title">
+            <i class="fa fa-server"></i> System Monitoring
+            <small class="text-muted">Real-time system resource monitoring</small>
+        </h1>
+    </div>
+</div>
+
+<!-- Alert Banner -->
+<div class="row mb-4" id="system-alerts-row" style="display: none;">
+    <div class="col-12">
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <h4 class="alert-heading">
+                <i class="fa fa-warning"></i> Active System Alerts
+            </h4>
+            <div id="system-alerts-list"></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Overview Metrics -->
+<div class="row mb-4">
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <div class="gauge-container">
+                    <canvas id="cpuGauge"></canvas>
+                </div>
+                <div class="mt-3">
+                    <h6 class="text-muted mb-1">CPU Usage</h6>
+                    <div class="d-flex justify-content-center align-items-center">
+                        <span class="metric-value" id="cpu-usage-value">0%</span>
+                        <span class="ms-2 badge" id="cpu-usage-badge">Normal</span>
+                    </div>
+                    <div class="text-muted small mt-1">
+                        <span id="cpu-cores">0</span> cores @ <span id="cpu-frequency">0</span> MHz
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <div class="gauge-container">
+                    <canvas id="memoryGauge"></canvas>
+                </div>
+                <div class="mt-3">
+                    <h6 class="text-muted mb-1">Memory Usage</h6>
+                    <div class="d-flex justify-content-center align-items-center">
+                        <span class="metric-value" id="memory-usage-value">0%</span>
+                        <span class="ms-2 badge" id="memory-usage-badge">Normal</span>
+                    </div>
+                    <div class="text-muted small mt-1">
+                        <span id="memory-used">0 GB</span> / <span id="memory-total">0 GB</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <div class="gauge-container">
+                    <canvas id="diskGauge"></canvas>
+                </div>
+                <div class="mt-3">
+                    <h6 class="text-muted mb-1">Disk Usage</h6>
+                    <div class="d-flex justify-content-center align-items-center">
+                        <span class="metric-value" id="disk-usage-value">0%</span>
+                        <span class="ms-2 badge" id="disk-usage-badge">Normal</span>
+                    </div>
+                    <div class="text-muted small mt-1">
+                        <span id="disk-used">0 GB</span> / <span id="disk-total">0 GB</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-3 col-md-6 mb-4">
+        <div class="card metric-card h-100">
+            <div class="card-body text-center">
+                <div class="gauge-container">
+                    <canvas id="networkGauge"></canvas>
+                </div>
+                <div class="mt-3">
+                    <h6 class="text-muted mb-1">Network</h6>
+                    <div class="d-flex justify-content-center align-items-center">
+                        <span class="metric-value" id="network-connections">0</span>
+                        <span class="ms-2 text-muted">connections</span>
+                    </div>
+                    <div class="text-muted small mt-1">
+                        <span id="network-sent">0 MB</span> sent / <span id="network-recv">0 MB</span> recv
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed System Information -->
+<div class="row mb-4">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-tasks"></i> System Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label class="text-muted small">Hostname</label>
+                                <div class="fw-bold" id="sys-hostname">-</div>
+                            </div>
+                            <div class="info-item">
+                                <label class="text-muted small">Operating System</label>
+                                <div class="fw-bold" id="sys-os">-</div>
+                            </div>
+                            <div class="info-item">
+                                <label class="text-muted small">OS Version</label>
+                                <div class="fw-bold" id="sys-os-version">-</div>
+                            </div>
+                            <div class="info-item">
+                                <label class="text-muted small">Architecture</label>
+                                <div class="fw-bold" id="sys-architecture">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <label class="text-muted small">Python Version</label>
+                                <div class="fw-bold" id="sys-python">-</div>
+                            </div>
+                            <div class="info-item">
+                                <label class="text-muted small">Processor</label>
+                                <div class="fw-bold" id="sys-processor">-</div>
+                            </div>
+                            <div class="info-item">
+                                <label class="text-muted small">Machine Type</label>
+                                <div class="fw-bold" id="sys-machine">-</div>
+                            </div>
+                            <div class="info-item">
+                                <label class="text-muted small">Boot Time</label>
+                                <div class="fw-bold" id="sys-boot-time">-</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-clock-o"></i> Uptime
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                <div class="display-4 fw-bold" id="uptime-days">0</div>
+                <div class="text-muted mb-3">days</div>
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="h4 mb-0" id="uptime-hours">00</div>
+                        <small class="text-muted">hours</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h4 mb-0" id="uptime-minutes">00</div>
+                        <small class="text-muted">minutes</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h4 mb-0" id="uptime-seconds">00</div>
+                        <small class="text-muted">seconds</small>
+                    </div>
+                </div>
+                <div class="mt-3 text-muted small">
+                    Last updated: <span id="last-updated">-</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CPU and Memory Details -->
+<div class="row mb-4">
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-microchip"></i> CPU Details
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="cpu-total-usage">0%</div>
+                            <div class="stat-label text-muted small">Total Usage</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="cpu-cores-count">0</div>
+                            <div class="stat-label text-muted small">Cores</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="cpu-frequency-value">0</div>
+                            <div class="stat-label text-muted small">Frequency (MHz)</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="cpu-usage-per-core">0%</div>
+                            <div class="stat-label text-muted small">Per Core Avg</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h6 class="text-muted small mb-3">CPU Usage History</h6>
+                    <div class="chart-container" style="height: 150px;">
+                        <canvas id="cpuHistoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-memory"></i> Memory Details
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="memory-usage-percent">0%</div>
+                            <div class="stat-label text-muted small">Usage</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="memory-used-value">0 GB</div>
+                            <div class="stat-label text-muted small">Used</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="memory-free-value">0 GB</div>
+                            <div class="stat-label text-muted small">Free</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="stat-box">
+                            <div class="stat-value" id="memory-total-value">0 GB</div>
+                            <div class="stat-label text-muted small">Total</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <h6 class="text-muted small mb-3">Memory Usage History</h6>
+                    <div class="chart-container" style="height: 150px;">
+                        <canvas id="memoryHistoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Disk Partitions -->
+<div class="row mb-4">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-hdd-o"></i> Disk Partitions
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row" id="disk-partitions">
+                    <div class="col-md-4 mb-3">
+                        <div class="disk-partition">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">
+                                    <i class="fa fa-folder-open"></i> <span id="disk-mount-0">-</span>
+                                </h6>
+                                <span class="badge bg-primary" id="disk-type-0">-</span>
+                            </div>
+                            <div class="progress mb-2" style="height: 8px;">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     id="disk-progress-0" style="width: 0%"></div>
+                            </div>
+                            <div class="d-flex justify-content-between small text-muted">
+                                <span id="disk-used-0">0 GB used</span>
+                                <span id="disk-free-0">0 GB free</span>
+                                <span id="disk-percent-0">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Network Statistics -->
+<div class="row mb-4">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">
+                    <i class="fa fa-network-wired"></i> Network Statistics
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="network-stat">
+                            <div class="h5 mb-1" id="net-sent-mb">0 MB</div>
+                            <div class="text-muted small">Bytes Sent</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="network-stat">
+                            <div class="h5 mb-1" id="net-recv-mb">0 MB</div>
+                            <div class="text-muted small">Bytes Received</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="network-stat">
+                            <div class="h5 mb-1" id="net-packets-sent">0</div>
+                            <div class="text-muted small">Packets Sent</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3 mb-3">
+                        <div class="network-stat">
+                            <div class="h5 mb-1" id="net-packets-recv">0</div>
+                            <div class="text-muted small">Packets Received</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="network-stat">
+                            <div class="h5 mb-1" id="net-connections">0</div>
+                            <div class="text-muted small">Active Connections</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="network-stat">
+                            <div class="h5 mb-1" id="net-errors">0</div>
+                            <div class="text-muted small">Errors</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Top Processes -->
+<div class="row">
+    <div class="col-lg-12">
+        <div class="card">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fa fa-list"></i> Top Processes by CPU Usage
+                </h5>
+                <button class="btn btn-sm btn-outline-secondary" onclick="refreshProcesses()">
+                    <i class="fa fa-refresh"></i> Refresh
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover process-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>PID</th>
+                                <th>Name</th>
+                                <th>User</th>
+                                <th>CPU %</th>
+                                <th>Memory %</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="process-table-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted">Loading processes...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Gauge Charts
+let cpuGauge, memoryGauge, diskGauge, networkGauge;
+let cpuHistoryChart, memoryHistoryChart;
+
+function initGauges() {
+    // CPU Gauge
+    const cpuGaugeCtx = document.getElementById('cpuGauge');
+    cpuGauge = new Chart(cpuGaugeCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: ['#2563eb', '#e9ecef'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '80%',
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+
+    // Memory Gauge
+    const memoryGaugeCtx = document.getElementById('memoryGauge');
+    memoryGauge = new Chart(memoryGaugeCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: ['#10b981', '#e9ecef'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '80%',
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+
+    // Disk Gauge
+    const diskGaugeCtx = document.getElementById('diskGauge');
+    diskGauge = new Chart(diskGaugeCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: ['#f59e0b', '#e9ecef'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '80%',
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+
+    // Network Gauge
+    const networkGaugeCtx = document.getElementById('networkGauge');
+    networkGauge = new Chart(networkGaugeCtx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: ['#8b5cf6', '#e9ecef'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '80%',
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+}
+
+function initHistoryCharts() {
+    // CPU History Chart
+    const cpuHistoryCtx = document.getElementById('cpuHistoryChart');
+    cpuHistoryChart = new Chart(cpuHistoryCtx, {
+        type: 'line',
+        data: {
+            labels: Array(20).fill(''),
+            datasets: [{
+                label: 'CPU %',
+                data: Array(20).fill(0),
+                borderColor: '#2563eb',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    }
+                },
+                x: {
+                    display: false
+                }
+            },
+            elements: {
+                point: {
+                    radius: 0
+                }
+            }
+        }
+    });
+
+    // Memory History Chart
+    const memoryHistoryCtx = document.getElementById('memoryHistoryChart');
+    memoryHistoryChart = new Chart(memoryHistoryCtx, {
+        type: 'line',
+        data: {
+            labels: Array(20).fill(''),
+            datasets: [{
+                label: 'Memory %',
+                data: Array(20).fill(0),
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: {
+                        color: 'rgba(0,0,0,0.05)'
+                    }
+                },
+                x: {
+                    display: false
+                }
+            },
+            elements: {
+                point: {
+                    radius: 0
+                }
+            }
+        }
+    });
+}
+
+function updateGauges(cpu, memory, disk, network) {
+    if (cpuGauge) {
+        cpuGauge.data.datasets[0].data = [cpu || 0, 100 - (cpu || 0)];
+        cpuGauge.update('none');
+    }
+    
+    if (memoryGauge) {
+        memoryGauge.data.datasets[0].data = [memory || 0, 100 - (memory || 0)];
+        memoryGauge.update('none');
+    }
+    
+    if (diskGauge) {
+        diskGauge.data.datasets[0].data = [disk || 0, 100 - (disk || 0)];
+        diskGauge.update('none');
+    }
+    
+    if (networkGauge) {
+        const networkPercent = Math.min(100, (network || 0) / 10);
+        networkGauge.data.datasets[0].data = [networkPercent, 100 - networkPercent];
+        networkGauge.update('none');
+    }
+}
+
+function updateHistoryCharts(cpu, memory) {
+    if (cpuHistoryChart) {
+        const cpuData = cpuHistoryChart.data.datasets[0].data;
+        cpuData.push(cpu || 0);
+        if (cpuData.length > 20) cpuData.shift();
+        cpuHistoryChart.update('none');
+    }
+    
+    if (memoryHistoryChart) {
+        const memoryData = memoryHistoryChart.data.datasets[0].data;
+        memoryData.push(memory || 0);
+        if (memoryData.length > 20) memoryData.shift();
+        memoryHistoryChart.update('none');
+    }
+}
+
+function updateSystemMetrics(data) {
+    if (!data || !data.system) return;
+    
+    const system = data.system;
+    const cpu = system.cpu || {};
+    const memory = system.memory || {};
+    const disks = system.disk || [];
+    const network = system.network || {};
+    const processes = system.processes || [];
+    const sysInfo = system.system || {};
+    
+    // Update CPU metrics
+    const cpuUsage = cpu.usage_percent || 0;
+    $('#cpu-usage-value').text(cpuUsage.toFixed(1) + '%');
+    $('#cpu-usage-badge').removeClass('bg-success bg-warning bg-danger').addClass(cpu.alert ? 'bg-danger' : 'bg-success').text(cpu.alert ? 'ALERT' : 'Normal');
+    $('#cpu-cores').text(cpu.cores || 0);
+    $('#cpu-frequency').text(cpu.frequency_mhz || 0);
+    $('#cpu-cores-count').text(cpu.cores || 0);
+    $('#cpu-frequency-value').text(cpu.frequency_mhz || 0);
+    $('#cpu-total-usage').text(cpuUsage.toFixed(1) + '%');
+    $('#cpu-usage-per-core').text((cpuUsage / (cpu.cores || 1)).toFixed(1) + '%');
+    
+    // Update Memory metrics
+    const memoryUsage = memory.usage_percent || 0;
+    $('#memory-usage-value').text(memoryUsage.toFixed(1) + '%');
+    $('#memory-usage-badge').removeClass('bg-success bg-warning bg-danger').addClass(memory.alert ? 'bg-danger' : 'bg-success').text(memory.alert ? 'ALERT' : 'Normal');
+    $('#memory-used').text(memory.used_gb + ' GB');
+    $('#memory-total').text(memory.total_gb + ' GB');
+    $('#memory-usage-percent').text(memoryUsage.toFixed(1) + '%');
+    $('#memory-used-value').text(memory.used_gb + ' GB');
+    $('#memory-free-value').text(memory.free_gb + ' GB');
+    $('#memory-total-value').text(memory.total_gb + ' GB');
+    
+    // Update Disk metrics (use first disk)
+    const disk = disks[0] || {};
+    const diskUsage = disk.usage_percent || 0;
+    $('#disk-usage-value').text(diskUsage.toFixed(1) + '%');
+    $('#disk-usage-badge').removeClass('bg-success bg-warning bg-danger').addClass(disk.alert ? 'bg-danger' : 'bg-success').text(disk.alert ? 'ALERT' : 'Normal');
+    $('#disk-used').text(disk.used_gb + ' GB');
+    $('#disk-total').text(disk.total_gb + ' GB');
+    
+    // Update Network metrics
+    $('#network-connections').text(network.connections || 0);
+    $('#network-sent').text((network.bytes_sent_mb || 0).toFixed(2) + ' MB');
+    $('#network-recv').text((network.bytes_recv_mb || 0).toFixed(2) + ' MB');
+    $('#net-sent-mb').text((network.bytes_sent_mb || 0).toFixed(2) + ' MB');
+    $('#net-recv-mb').text((network.bytes_recv_mb || 0).toFixed(2) + ' MB');
+    $('#net-packets-sent').text(network.packets_sent || 0);
+    $('#net-packets-recv').text(network.packets_recv || 0);
+    $('#net-connections').text(network.connections || 0);
+    $('#net-errors').text((network.errin || 0) + (network.errout || 0));
+    
+    // Update System Info
+    $('#sys-hostname').text(sysInfo.hostname || '-');
+    $('#sys-os').text(sysInfo.os || '-');
+    $('#sys-os-version').text(sysInfo.os_version || '-');
+    $('#sys-architecture').text(sysInfo.architecture || '-');
+    $('#sys-python').text(sysInfo.python_version || '-');
+    $('#sys-processor').text(sysInfo.processor || '-');
+    $('#sys-machine').text(sysInfo.machine || '-');
+    $('#sys-boot-time').text(moment(sysInfo.boot_time).format('YYYY-MM-DD HH:mm:ss') || '-');
+    $('#last-updated').text(moment().format('YYYY-MM-DD HH:mm:ss'));
+    
+    // Update Uptime
+    const bootTime = moment(sysInfo.boot_time);
+    const now = moment();
+    const uptime = moment.duration(now.diff(bootTime));
+    
+    $('#uptime-days').text(Math.floor(uptime.asDays()));
+    $('#uptime-hours').text(String(uptime.hours()).padStart(2, '0'));
+    $('#uptime-minutes').text(String(uptime.minutes()).padStart(2, '0'));
+    $('#uptime-seconds').text(String(uptime.seconds()).padStart(2, '0'));
+    
+    // Update gauges
+    updateGauges(cpuUsage, memoryUsage, diskUsage, network.connections || 0);
+    
+    // Update history charts
+    updateHistoryCharts(cpuUsage, memoryUsage);
+    
+    // Update disk partitions
+    updateDiskPartitions(disks);
+    
+    // Update processes
+    updateProcesses(processes);
+    
+    // Update alerts
+    updateSystemAlerts(data.alerts || []);
+}
+
+function updateDiskPartitions(disks) {
+    const container = $('#disk-partitions');
+    container.empty();
+    
+    disks.forEach((disk, index) => {
+        const usage = disk.usage_percent || 0;
+        const badgeClass = usage > 90 ? 'bg-danger' : usage > 75 ? 'bg-warning' : 'bg-success';
+        
+        const html = `
+            <div class="col-md-4 mb-3">
+                <div class="disk-partition">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">
+                            <i class="fa fa-folder-open"></i> ${disk.mountpoint || '-'}
+                        </h6>
+                        <span class="badge ${badgeClass}">${usage.toFixed(1)}%</span>
+                    </div>
+                    <div class="progress mb-2" style="height: 8px;">
+                        <div class="progress-bar ${badgeClass}" role="progressbar" 
+                             style="width: ${usage}%">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between small text-muted">
+                        <span>${disk.used_gb || 0} GB used</span>
+                        <span>${disk.free_gb || 0} GB free</span>
+                        <span>${usage.toFixed(1)}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.append(html);
+    });
+}
+
+function updateProcesses(processes) {
+    const tbody = $('#process-table-body');
+    
+    if (processes.length === 0) {
+        tbody.html('<tr><td colspan="6" class="text-center text-muted">No processes found</td></tr>');
+        return;
+    }
+    
+    let html = '';
+    processes.forEach(proc => {
+        const cpuClass = proc.cpu_percent > 80 ? 'table-danger' : proc.cpu_percent > 50 ? 'table-warning' : '';
+        const memClass = proc.memory_percent > 80 ? 'table-danger' : proc.memory_percent > 50 ? 'table-warning' : '';
+        
+        html += `
+            <tr>
+                <td>${proc.pid || '-'}</td>
+                <td>${proc.name || '-'}</td>
+                <td>${proc.user || '-'}</td>
+                <td class="${cpuClass}">${(proc.cpu_percent || 0).toFixed(1)}%</td>
+                <td class="${memClass}">${(proc.memory_percent || 0).toFixed(1)}%</td>
+                <td><span class="badge bg-success">Running</span></td>
+            </tr>
+        `;
+    });
+    
+    tbody.html(html);
+}
+
+function updateSystemAlerts(alerts) {
+    if (alerts.length === 0) {
+        $('#system-alerts-row').hide();
+        return;
+    }
+    
+    let html = '';
+    alerts.forEach(alert => {
+        const severity = alert.severity === 'high' ? 'danger' : 'warning';
+        html += `
+            <div class="alert alert-${severity} mb-2 p-2">
+                <i class="fa fa-warning me-2"></i>
+                <strong>${alert.type.toUpperCase()}:</strong> ${alert.message}
+            </div>
+        `;
+    });
+    
+    $('#system-alerts-list').html(html);
+    $('#system-alerts-row').show();
+}
+
+function refreshProcesses() {
+    socket.emit('request_metrics');
+}
+
+// Initialize on page load
+$(document).ready(function() {
+    initGauges();
+    initHistoryCharts();
+    
+    // Request initial data
+    socket.emit('request_metrics');
+});
+
+// Socket.IO event handlers
+socket.on('metrics_update', function(data) {
+    updateSystemMetrics(data);
+});
+</script>
+{% endblock %}
